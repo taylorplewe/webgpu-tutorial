@@ -28,7 +28,7 @@ context.configure({
 	format: canvasFormat,
 });
 
-const GRID_SIZE = 32;
+const GRID_SIZE = 64;
 const WORKGROUP_SIZE = 8;
 const vertices = new Float32Array([
 //   X,    Y,
@@ -238,7 +238,7 @@ const bindGroups = [
 	}),
 ];
 
-const UPDATE_INTERVAL = 200;
+const UPDATE_INTERVAL = 20;
 let step = 0;
 const update = () => {
 	const encoder = device.createCommandEncoder();
