@@ -2,6 +2,7 @@
 <html>
 	<head>
 		<title>Web GPU Tutorial</title>
+		<style>body { background-color: #111; color: #aaa; }</style>
 		<script type="module">
 	
 
@@ -53,6 +54,28 @@ const uniformBuffer = device.createBuffer({
 });
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
 
+const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
+const cellStateStorage = [
+	device.createBuffer({
+		label: "Cell State",
+		size: cellStateArray.byteLength,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+	}),
+	device.createBuffer({
+		label: "Cell State",
+		size: cellStateArray.byteLength,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+	}),
+];
+for (let i = 0; i < cellStateArray.length; i += 3) {
+  cellStateArray[i] = 1;
+}
+device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
+for (let i = 0; i < cellStateArray.length; i++) {
+  cellStateArray[i] = i % 2;
+}
+device.queue.writeBuffer(cellStateStorage[1], 0, cellStateArray);
+
 const vertexBufferLayout = {
 	arrayStride: 8,
 	attributes: [{
@@ -73,13 +96,15 @@ const cellShaderModule = device.createShaderModule({
 			@location(0) cell: vec2f,
 		}
 		@group(0) @binding(0) var<uniform> gridSize: vec2f;
+		@group(0) @binding(1) var<storage> cellState: array<u32>;
 
 		@vertex
 		fn vertexMain(in: VertexInput) -> VertexOutput {
 			let i = f32(in.instance);
 			let cellPos = vec2f(i % gridSize.x, floor(i / gridSize.x));
 			let cellOffset = (cellPos / gridSize) * 2;
-			let gridPos = (((in.pos + 1) / gridSize) - 1) + cellOffset;
+			let state = f32(cellState[in.instance]);
+			let gridPos = (((in.pos*state + 1) / gridSize) - 1) + cellOffset;
 
 			var out: VertexOutput;
 			out.pos = vec4f(gridPos, 0, 1); // (x, y, z, w)
@@ -111,34 +136,69 @@ const cellPipeline = device.createRenderPipeline({
 	},
 });
 
-const bindGroup = device.createBindGroup({
-	label: 'Cell renderer bind group',
-	layout: cellPipeline.getBindGroupLayout(0),
-	entries: [{
-		binding: 0,
-		resource: {
-			buffer: uniformBuffer,
-		},
-	}],
-});
+const bindGroups = [
+	device.createBindGroup({
+		label: 'Cell renderer bind group',
+		layout: cellPipeline.getBindGroupLayout(0),
+		entries: [
+			{
+				binding: 0,
+				resource: {
+					buffer: uniformBuffer,
+				},
+			},
+			{
+				binding: 1,
+				resource: {
+					buffer: cellStateStorage[0],
+				},
+			},
+		],
+	}),
+	device.createBindGroup({
+		label: 'Cell renderer bind group',
+		layout: cellPipeline.getBindGroupLayout(0),
+		entries: [
+			{
+				binding: 0,
+				resource: {
+					buffer: uniformBuffer,
+				},
+			},
+			{
+				binding: 1,
+				resource: {
+					buffer: cellStateStorage[1],
+				},
+			},
+		],
+	}),
+];
 
-const encoder = device.createCommandEncoder();
-const pass = encoder.beginRenderPass({
-	colorAttachments: [{
-		view: context.getCurrentTexture().createView(),
-		loadOp: 'clear',
-		clearValue: { r: 0.2, g: 0.2, b: 0.2, a: 1 },
-		storeOp: 'store',
-	}]
-});
+const UPDATE_INTERVAL = 200;
+let step = 0;
+const update = () => {
+	const encoder = device.createCommandEncoder();
+	const pass = encoder.beginRenderPass({
+		colorAttachments: [{
+			view: context.getCurrentTexture().createView(),
+			loadOp: 'clear',
+			clearValue: { r: 0.2, g: 0.2, b: 0.2, a: 1 },
+			storeOp: 'store',
+		}]
+	});
 
-pass.setPipeline(cellPipeline);
-pass.setVertexBuffer(0, vertexBuffer);
-pass.setBindGroup(0, bindGroup);
-pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
+	pass.setPipeline(cellPipeline);
+	pass.setVertexBuffer(0, vertexBuffer);
+	pass.setBindGroup(0, bindGroups[step % 2]);
+	pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
 
-pass.end();
-device.queue.submit([encoder.finish()]);
+	pass.end();
+	device.queue.submit([encoder.finish()]);
+
+	step++;
+}
+setInterval(update, UPDATE_INTERVAL);
 
 
 
