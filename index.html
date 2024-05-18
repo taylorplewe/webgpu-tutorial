@@ -64,21 +64,33 @@ const vertexBufferLayout = {
 const cellShaderModule = device.createShaderModule({
 	label: 'Cell shader',
 	code: `
+		struct VertexInput  {
+			@location(0) pos: vec2f,
+			@builtin(instance_index) instance: u32,
+		}
+		struct VertexOutput {
+			@builtin(position) pos: vec4f,
+			@location(0) cell: vec2f,
+		}
 		@group(0) @binding(0) var<uniform> gridSize: vec2f;
 
 		@vertex
-		fn vertexMain(@location(0) pos: vec2f, @builtin(instance_index) instance: u32) -> @builtin(position) vec4f {
-			let i = f32(instance);
+		fn vertexMain(in: VertexInput) -> VertexOutput {
+			let i = f32(in.instance);
 			let cellPos = vec2f(i % gridSize.x, floor(i / gridSize.x));
 			let cellOffset = (cellPos / gridSize) * 2;
-			let gridPos = (((pos + 1) / gridSize) - 1) + cellOffset;
+			let gridPos = (((in.pos + 1) / gridSize) - 1) + cellOffset;
 
-			return vec4f(gridPos, 0, 1); // (x, y, z, w)
+			var out: VertexOutput;
+			out.pos = vec4f(gridPos, 0, 1); // (x, y, z, w)
+			out.cell = cellPos;
+			return out;
 		}
 
 		@fragment
-		fn fragmentMain() -> @location(0) vec4<f32> {
-			return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+		fn fragmentMain(in: VertexOutput) -> @location(0) vec4<f32> {
+			let c = in.cell/gridSize;
+			return vec4<f32>(c, 1-c.x, 1.0);
 		}
 	`
 });
