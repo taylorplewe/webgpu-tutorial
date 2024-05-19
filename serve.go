@@ -3,11 +3,17 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		http.ServeFile(w, req, "index.html")
+		path := strings.TrimPrefix(req.URL.Path, "/")
+		if path == "" {
+			http.ServeFile(w, req, "index.html")
+		} else {
+			http.ServeFile(w, req, path)
+		}
 	})
 
 	fmt.Println("listening on port 80...")
